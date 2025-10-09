@@ -14,6 +14,25 @@ conda env create -f environment.yml
 ```
 
 - Dowload dataset
+```
+cd scripts
+
+./download_dataset.bash
+
+```
+
+# Run Training
+
+```
+cd scripts
+```
+
+Open the train.py file and Edit parameters in under the #%% Parameters section
+
+```
+python train.py
+```
+
 
 
 
