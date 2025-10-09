@@ -1,0 +1,5 @@
+
+Following NEED to be cited for using rsna dataset:
+    @ Halabi SS, Prevedello LM, Kalpathy-Cramer J, et al. The RSNA Pediatric Bone Age Machine Learning Challenge. Radiology 2018; 290(2):498-503.
+    @ Siegel EL. What Can We Learn from the RSNA Pediatric Bone Age Machine Learning Challenge? Radiology 2018; 290(2):504-505.
+    @ Larson DB, Chen MC, Lungren MP, et al. Performance of a Deep-Learning Neural Network Model in Assessing Skeletal Maturity on Pediatric Hand Radiographs. Radiology 2017;287(1):313-322.
