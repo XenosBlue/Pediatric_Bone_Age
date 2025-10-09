@@ -206,7 +206,7 @@ df = pd.concat(
 df.index += 1
 df.index.name = "epoch"
 
-df.to_csv("fc_logs.csv", index=True)
+df.to_csv(os.path.join(EXP_DIR, "fc_logs.csv"), index=True)
 
 
 
@@ -281,7 +281,7 @@ df = pd.concat(
 df.index += 1
 df.index.name = "epoch"
 
-df.to_csv("finetune_logs.csv", index=True)
+df.to_csv(os.path.join(EXP_DIR, "finetune_logs.csv"), index=True)
 
 
 
