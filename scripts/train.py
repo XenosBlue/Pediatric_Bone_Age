@@ -35,7 +35,7 @@ from archs import *
 
 ROOT_DIR = ".."
 NAME = "Nikhil"
-EXP_NAME = "ResNet50_exp0"
+EXP_NAME = "ResNet50_50_50_epochs_exp1"
 
 #Data 
 TRAIN_CSV = os.path.join(ROOT_DIR, "data", "train.csv")
@@ -65,24 +65,24 @@ DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 #Train
 
-CRITERION = torch.nn.MSELoss()
+CRITERION = torch.nn.HuberLoss()
 
 ## Phase 1 : Train FC
-EPOCHS_P1 = 2
+EPOCHS_P1 = 50
 OPTIMIZER_P1 = torch.optim.AdamW
 LERNING_RATE_P1 = 1e-3
 WEIGHT_DECAY_P1 = 1e-4
 
 ## Phase 2 : Fine Tune
 
-EPOCHS_P2 = 2
+EPOCHS_P2 = 50
 OPTIMIZER_P2 = torch.optim.SGD
 LERNING_RATE_P2 = 1e-4
 REGULARIZER_P2 = 1e-5
 
 #Log
 
-PLOT_FREQ = 2
+PLOT_FREQ = 10
 
 
 
@@ -155,8 +155,8 @@ for epoch in range(1, EPOCHS_P1 + 1):
     MODEL.train()
     train_loss = 0.0
     for imgs, labels in train_loader:
-        imgs = imgs.to(DEVICE)
-        y = labels["boneage"].to(DEVICE)
+        imgs = imgs.to(DEVICE, non_blocking=True)
+        y = labels["boneage"].to(DEVICE, non_blocking=True)
         # sex = labels["male"].to(DEVICE)
 
         pred = MODEL(imgs)

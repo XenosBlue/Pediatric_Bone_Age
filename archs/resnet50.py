@@ -32,7 +32,7 @@ class ResNet50_Regressor(nn.Module):
         base = torchvision.models.resnet50(weights=weights)
 
         feat_dim = base.fc.in_features
-        self.ftr_xtr = self.ftr_xtr = nn.Sequential(*list(base.children())[:-2])
+        self.ftr_xtr =  nn.Sequential(*list(base.children())[:-2])
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = mlp.MLP(feat_dim, feat_dim, dropout)
 

@@ -45,7 +45,8 @@ class BoneAgeDataset(Dataset):
         with open(csv_path, newline="") as f:
             for r in csv.DictReader(f):
                 rid  = int((r.get("id") or r.get("Image ID")))
-                bone = float((r.get("boneage") or r.get("Bone Age (months)"))) / 228.0
+                bone = float((r.get("boneage") or r.get("Bone Age (months)")))
+                bone = (bone - 132) / 41.182                           # EDIT: normalize with median and std dev
                 # rid = int(r["id"])
                 # bone = int(r["boneage"])/228                            #EDIT: max age is set to 228
                 male = r["male"].strip().lower() is True
