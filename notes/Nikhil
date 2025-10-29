@@ -1,3 +1,4 @@
 Divided all bone ages by max age which is 228 may need to change
+Update: Normalization is now z score (not really) - median and divide std
 
 
