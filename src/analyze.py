@@ -24,8 +24,6 @@ def plot_losses(train_losses, val_losses, save_path=None,  title="Loss vs. Epoch
 
 #%%
 
-#%% Analysis 
-
 def evaluate_model(model,
                    loader,
                    mean= 0.,
@@ -40,8 +38,9 @@ def evaluate_model(model,
     with torch.no_grad():
         for imgs, labels in loader:
             imgs = imgs.to(device, non_blocking=True)
-            y = labels["boneage"].to(device, non_blocking=True).float().view(-1)
-            p = model(imgs).view(-1)
+            y = labels["boneage"].to(device, non_blocking=True).float()
+            s = labels["male"].to(device, non_blocking=True).float()
+            p = model(imgs, s).view(-1)
 
             y = y.detach().cpu().numpy()
             p = p.detach().cpu().numpy()
@@ -58,10 +57,12 @@ def evaluate_model(model,
 
     err = p - y
     total_abs_error = np.abs(err).sum()
+    mean_abs_error = np.abs(err).mean()
     mse = np.mean(err ** 2)
 
     print(f"Samples: {len(y)}")
     print(f"Total Absolute Error: {total_abs_error:.3f}")
+    print(f"Mean Absolute Error: {mean_abs_error:.3f}")
     print(f"MSE: {mse:.3f}")
 
 
@@ -128,70 +129,74 @@ def evaluate_model(model,
 
 #%% Local Test
 
-# from torch.utils.data import DataLoader
-# import torchvision
+if __name__ == "__main__":
+        
+    from torch.utils.data import DataLoader
+    import torchvision
 
-# import sys
-# sys.path.append("../src")
-# import dataloader
+    import sys
+    sys.path.append("../src")
+    import dataloader
 
-# sys.path.append("..")
-# from archs import *
-
-
-# ROOT_DIR = ".."
-# NAME = "Nikhil"
-# EXP_NAME = "ResNet50_50_50_epochs_exp1"
-
-# #Data 
-# TRAIN_CSV = os.path.join(ROOT_DIR, "data", "train.csv")
-# TRAIN_DIR = os.path.join(ROOT_DIR, "data", "boneage-training-dataset")
-
-# VAL_CSV = os.path.join(ROOT_DIR, "data", "Bone Age Validation Set", "Validation Dataset.csv")
-# VAL_DIR = os.path.join(ROOT_DIR, "data", "Bone Age Validation Set","boneage-validation-dataset-1")
-# EXP_DIR = os.path.join(ROOT_DIR, "experiments", NAME, EXP_NAME)
-# CKPT_DIR = os.path.join(ROOT_DIR, "checkpoints")
-
-# BONEAGE_MEAN = 132.0
-# BONEAGE_STD  = 41.182
-# IMG_SIZE = 224
-# BATCH_SIZE = 32
-# NUM_WORKERS = 4
-# PIN_MEM = True
-# TRANSFORM = torchvision.models.ResNet50_Weights.DEFAULT.transforms()
-# DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-
-# ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_50_50_epochs_exp1/model_fc_epoch.pth"
-# ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_exp0/model_fc_epoch.pth"
-# ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_exp0/model_finetune_epoch.pth"
-
-# model = torch.load(ckpt)
-
-# val_dataset = dataloader.BoneAgeDataset(
-#         csv_path=VAL_CSV,
-#         img_dir = VAL_DIR,
-#         transform = TRANSFORM,
-#         image_size = IMG_SIZE,
-#         drop_missing = True)
-
-# val_loader = DataLoader(
-#     val_dataset,
-#     batch_size=BATCH_SIZE,
-#     shuffle=False,
-#     num_workers=NUM_WORKERS,
-#     pin_memory=PIN_MEM,
-#     persistent_workers=(NUM_WORKERS > 0),
-#     prefetch_factor=2 if NUM_WORKERS > 0 else None,
-# )
+    sys.path.append("..")
+    from archs import *
 
 
-# _ = evaluate_model(
-#     model,
-#     val_loader,
-#     mean=BONEAGE_MEAN,
-#     std=BONEAGE_STD,
-#     # save_path=os.path.join(EXP_DIR, "error_vs_age.png"),
-# )
+    ROOT_DIR = ".."
+    NAME = "Nikhil"
+    EXP_NAME = "ResNet50_50_50_epochs_exp2"
+
+    #Data 
+    TRAIN_CSV = os.path.join(ROOT_DIR, "data", "train.csv")
+    TRAIN_DIR = os.path.join(ROOT_DIR, "data", "boneage-training-dataset")
+
+    VAL_CSV = os.path.join(ROOT_DIR, "data", "Bone Age Validation Set", "Validation Dataset.csv")
+    VAL_DIR = os.path.join(ROOT_DIR, "data", "Bone Age Validation Set","boneage-validation-dataset-2")
+    EXP_DIR = os.path.join(ROOT_DIR, "experiments", NAME, EXP_NAME)
+    CKPT_DIR = os.path.join(ROOT_DIR, "checkpoints")
+
+    BONEAGE_MEAN = 132.0
+    BONEAGE_STD  = 41.182
+    IMG_SIZE = 224
+    BATCH_SIZE = 16
+    NUM_WORKERS = 4
+    PIN_MEM = True
+    TRANSFORM = torchvision.models.ResNet50_Weights.DEFAULT.transforms()
+    DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+    ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_50_50_epochs_exp2/model_fc_epoch.pth"
+    # ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_exp0/model_fc_epoch.pth"
+    # ckpt = "/mnt/c/Users/cnikh/Projects/dl_proj/Pediatric_Bone_Age/checkpoints/ResNet50_50_50_epochs_exp1/model_finetune_epoch.pth"
+
+    model = torch.load(ckpt)
+
+    from transforms import VAL_TRANSFORM
+
+    val_dataset = dataloader.BoneAgeDataset(
+            csv_path=VAL_CSV,
+            img_dir = VAL_DIR,
+            transform = VAL_TRANSFORM,
+            image_size = IMG_SIZE,
+            drop_missing = True)
+
+    val_loader = DataLoader(
+        val_dataset,
+        batch_size=BATCH_SIZE,
+        shuffle=False,
+        num_workers=NUM_WORKERS,
+        pin_memory=PIN_MEM,
+        persistent_workers=(NUM_WORKERS > 0),
+        prefetch_factor=2 if NUM_WORKERS > 0 else None,
+    )
+
+
+    _ = evaluate_model(
+        model,
+        val_loader,
+        mean=BONEAGE_MEAN,
+        std=BONEAGE_STD,
+        save_path=os.path.join(EXP_DIR, "error_vs_age.png"),
+    )
 
 
 # %%

@@ -1,0 +1,38 @@
+ROOT_DIR = '..'
+NAME = 'Nikhil'
+EXP_NAME = 'ResNet50_50_50_epochs_exp1'
+
+# Data
+TRAIN_CSV = '../data/train.csv'
+TRAIN_DIR = '../data/boneage-training-dataset'
+VAL_CSV = '../data/Bone Age Validation Set/Validation Dataset.csv'
+VAL_DIR = '../data/Bone Age Validation Set/boneage-validation-dataset-1'
+EXP_DIR = '../experiments/Nikhil/ResNet50_50_50_epochs_exp1'
+CKPT_DIR = '../checkpoints'
+
+# Dataloader
+IMG_SIZE = 224
+BATCH_SIZE = 32
+NUM_WORKERS = 4
+PIN_MEM = True
+# Model
+MODEL = archs.resnet50.ResNet50_Regressor
+DEVICE = 'cuda'
+
+# Train
+CRITERION = torch.nn.modules.loss.HuberLoss
+
+## Phase 1 : Train FC
+EPOCHS_P1 = 50
+OPTIMIZER_P1 = torch.optim.adamw.AdamW
+LERNING_RATE_P1 = 0.001
+WEIGHT_DECAY_P1 = 0.0001
+
+## Phase 2 : Fine Tune
+EPOCHS_P2 = 50
+OPTIMIZER_P2 = torch.optim.sgd.SGD
+LERNING_RATE_P2 = 0.0001
+REGULARIZER_P2 = 1e-05
+
+# Log
+PLOT_FREQ = 10

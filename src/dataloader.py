@@ -49,7 +49,9 @@ class BoneAgeDataset(Dataset):
                 bone = (bone - 132) / 41.182                           # EDIT: normalize with median and std dev
                 # rid = int(r["id"])
                 # bone = int(r["boneage"])/228                            #EDIT: max age is set to 228
-                male = r["male"].strip().lower() is True
+                # male = r["male"].strip().lower() is True
+                male_str = (r.get("male") or r.get("Male") or "").strip().lower()
+                male = male_str in ("1", "true", "TRUE", "True")
                 # print(r["id"])
                 # exit()
                 path = self.id_to_path.get(rid)
@@ -78,7 +80,7 @@ class BoneAgeDataset(Dataset):
 
         target = {
             "boneage": torch.tensor(float(s["boneage"]), dtype=torch.float32),
-            "male": torch.tensor(1.0 if s["male"] else 0.0, dtype=torch.float32),
+            "male": torch.tensor(1.0 if s["male"] is True else 0.0, dtype=torch.float32),
         }
         return x, target
 

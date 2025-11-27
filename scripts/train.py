@@ -8,7 +8,10 @@ import pandas as pd
 from typing import List, Dict, Optional, Callable
 
 import torch
-# from torch.utils.data import Dataset
+
+torch.backends.cudnn.benchmark = True
+torch.backends.cudnn.deterministic = False
+
 from torch.utils.data import DataLoader
 import torchvision
 
@@ -22,12 +25,11 @@ import sys
 sys.path.append("../src")
 import dataloader
 import analyze
+from transforms import TRAIN_TRANSFORM, VAL_TRANSFORM
+from wingloss import CombinedRegressionLoss
 
 sys.path.append("..")
 from archs import *
-
-
-
 
 
 
@@ -35,9 +37,8 @@ from archs import *
 
 ROOT_DIR = ".."
 NAME = "Nikhil"
-EXP_NAME = "ResNet50_50_50_epochs_exp1"
+EXP_NAME = "ResNet50_50_50_epochs_exp2"
 
-#Data 
 TRAIN_CSV = os.path.join(ROOT_DIR, "data", "train.csv")
 TRAIN_DIR = os.path.join(ROOT_DIR, "data", "boneage-training-dataset")
 
@@ -46,45 +47,31 @@ VAL_DIR = os.path.join(ROOT_DIR, "data", "Bone Age Validation Set","boneage-vali
 EXP_DIR = os.path.join(ROOT_DIR, "experiments", NAME, EXP_NAME)
 CKPT_DIR = os.path.join(ROOT_DIR, "checkpoints")
 
-
-
 os.makedirs(EXP_DIR, exist_ok=True)
 
-
-#Dataloader
 IMG_SIZE = 224
-BATCH_SIZE = 32
+BATCH_SIZE = 256
 NUM_WORKERS = 4
 PIN_MEM = True
-TRANSFORM = torchvision.models.ResNet50_Weights.DEFAULT.transforms()
+BONEAGE_MEAN = 132.0
+BONEAGE_STD  = 41.182
 
-#Model
-
-MODEL = resnet50.ResNet50_Regressor()
+MODEL = resnet50_v2.ResNet50_Regressor()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
-#Train
+CRITERION = CombinedRegressionLoss()
 
-CRITERION = torch.nn.HuberLoss()
-
-## Phase 1 : Train FC
 EPOCHS_P1 = 50
 OPTIMIZER_P1 = torch.optim.AdamW
 LERNING_RATE_P1 = 1e-3
 WEIGHT_DECAY_P1 = 1e-4
-
-## Phase 2 : Fine Tune
 
 EPOCHS_P2 = 50
 OPTIMIZER_P2 = torch.optim.SGD
 LERNING_RATE_P2 = 1e-4
 REGULARIZER_P2 = 1e-5
 
-#Log
-
 PLOT_FREQ = 10
-
-
 
 
 #%% Data
@@ -92,7 +79,7 @@ PLOT_FREQ = 10
 TRAIN_DATASET = dataloader.BoneAgeDataset(
         csv_path=TRAIN_CSV,
         img_dir = TRAIN_DIR,
-        transform = TRANSFORM,
+        transform = TRAIN_TRANSFORM,
         image_size = IMG_SIZE,
         drop_missing = True)
 
@@ -109,7 +96,7 @@ train_loader = DataLoader(
 val_dataset = dataloader.BoneAgeDataset(
         csv_path=VAL_CSV,
         img_dir = VAL_DIR,
-        transform = TRANSFORM,
+        transform = VAL_TRANSFORM,
         image_size = IMG_SIZE,
         drop_missing = True)
 
@@ -125,7 +112,6 @@ val_loader = DataLoader(
 
 #%% Optimizers
 
-opt1 = OPTIMIZER_P1(MODEL.parameters(), lr=LERNING_RATE_P1, weight_decay = WEIGHT_DECAY_P1)
 opt2 = OPTIMIZER_P2(MODEL.parameters(), lr=LERNING_RATE_P2, weight_decay = REGULARIZER_P2)
 
 #%% Train FC
@@ -144,9 +130,15 @@ for param in MODEL.fc.parameters():
 
 print("Unfreezed fc params")
 
-best = 1e10
+opt1 = OPTIMIZER_P1(MODEL.fc.parameters(), lr=LERNING_RATE_P1, weight_decay=WEIGHT_DECAY_P1)
+scheduler1 = torch.optim.lr_scheduler.CosineAnnealingLR(opt1, T_max=EPOCHS_P1, eta_min=1e-6)
+
+best_mae = 1e10
 train_loss_list = []
 val_loss_list = []
+val_mae_list = []
+
+scaler1 = torch.amp.GradScaler(device="cuda")
 
 for epoch in range(1, EPOCHS_P1 + 1):
 
@@ -155,59 +147,81 @@ for epoch in range(1, EPOCHS_P1 + 1):
     MODEL.train()
     train_loss = 0.0
     for imgs, labels in train_loader:
-        imgs = imgs.to(DEVICE, non_blocking=True)
+        imgs = imgs.to(DEVICE, non_blocking=True, memory_format=torch.channels_last)
         y = labels["boneage"].to(DEVICE, non_blocking=True)
-        # sex = labels["male"].to(DEVICE)
+        sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        pred = MODEL(imgs)
-        loss = CRITERION(pred, y)
         opt1.zero_grad()
-        loss.backward()
-        opt1.step()
+        with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
+            pred = MODEL(imgs, sex)
+            loss = CRITERION(pred, y)
+        scaler1.scale(loss).backward()
+        scaler1.step(opt1)
+        scaler1.update()
         train_loss += loss.item() * imgs.size(0)
-
-    print(f"epoch {epoch}: Loss = {train_loss/len(train_loader.dataset):.3f}", end = "\t")
 
     MODEL.eval()
     val_loss = 0.0
-    for imgs, labels in val_loader:
-        imgs = imgs.to(DEVICE)
-        y = labels["boneage"].to(DEVICE)
-        # sex = labels["male"].to(DEVICE)
+    val_mae = 0.0
+    n_val = 0
+    with torch.no_grad():
+        for imgs, labels in val_loader:
+            imgs = imgs.to(DEVICE, non_blocking=True, memory_format=torch.channels_last)
+            y = labels["boneage"].to(DEVICE, non_blocking=True)
+            sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        with torch.no_grad():
-            pred = MODEL(imgs)
-        loss = CRITERION(pred, y)
-        val_loss += loss.item() * imgs.size(0)
+            with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
+                pred = MODEL(imgs, sex)
+                loss = CRITERION(pred, y)
+            val_loss += loss.item() * imgs.size(0)
 
-    print(f"Val Loss = {val_loss/len(val_loader.dataset):.3f}\tTime = {time.perf_counter() - start_time:.3f}s")
+            pred_months = pred * BONEAGE_STD + BONEAGE_MEAN
+            y_months = y * BONEAGE_STD + BONEAGE_MEAN
+            val_mae += (pred_months - y_months).abs().sum().item()
+            n_val += y.size(0)
 
-    train_loss_list.append(train_loss/len(train_loader.dataset))
-    val_loss_list.append(val_loss/len(val_loader.dataset))
+    train_loss_mean = train_loss / len(train_loader.dataset)
+    val_loss_mean = val_loss / len(val_loader.dataset)
+    val_mae_mean = val_mae / n_val
 
-    if val_loss < best:
-        best = val_loss
+    print(
+        f"epoch {epoch}: Loss = {train_loss_mean:.3f}\t"
+        f"Val Loss = {val_loss_mean:.3f}\t"
+        f"Val MAE = {val_mae_mean:.3f}\t"
+        f"Time = {time.perf_counter() - start_time:.3f}s"
+    )
+
+    train_loss_list.append(train_loss_mean)
+    val_loss_list.append(val_loss_mean)
+    val_mae_list.append(val_mae_mean)
+
+    if val_mae_mean < best_mae:
+        best_mae = val_mae_mean
         os.makedirs(os.path.join(CKPT_DIR, EXP_NAME), exist_ok=True)
-        torch.save(MODEL, os.path.join(CKPT_DIR, EXP_NAME, f"model_fc_epoch.pth"))
-        print(f"Saved best model with loss {best} o_O")
+        torch.save(MODEL, os.path.join(CKPT_DIR, EXP_NAME, "model_fc_epoch.pth"))
+        print(f"Saved best model with Val MAE {best_mae:.3f} months o_O")
 
     if (epoch % PLOT_FREQ == 0) and epoch != 0:
-        analyze.plot_losses(train_loss_list, val_loss_list, save_path=os.path.join(EXP_DIR, f"loss_fc_epoch{epoch}.png"))
+        analyze.plot_losses(
+            train_loss_list, val_loss_list,
+            save_path=os.path.join(EXP_DIR, f"loss_fc_epoch{epoch}.png")
+        )
         print(f"Saved plot at epoch {epoch}")
 
+    scheduler1.step()
 
 df = pd.concat(
     {
         "train_loss": pd.Series(train_loss_list),
-        "val_loss":   pd.Series(val_loss_list),
+        "val_loss": pd.Series(val_loss_list),
+        "val_mae": pd.Series(val_mae_list),
     },
-    axis=1
+    axis=1,
 )
 df.index += 1
 df.index.name = "epoch"
 
 df.to_csv(os.path.join(EXP_DIR, "fc_logs.csv"), index=True)
-
 
 
 #%% Fine Tune Whole
@@ -223,7 +237,11 @@ print("Unfreezed all params")
 
 train_loss_list = []
 val_loss_list = []
-best = 1e10
+val_mae_list = []
+best_mae = 1e10
+
+scheduler2 = torch.optim.lr_scheduler.CosineAnnealingLR(opt2, T_max=EPOCHS_P2, eta_min=1e-6)
+scaler2 = torch.amp.GradScaler(device="cuda")
 
 for epoch in range(1, EPOCHS_P2 + 1):
 
@@ -232,58 +250,81 @@ for epoch in range(1, EPOCHS_P2 + 1):
     MODEL.train()
     train_loss = 0.0
     for imgs, labels in train_loader:
-        imgs = imgs.to(DEVICE)
-        y = labels["boneage"].to(DEVICE)
+        imgs = imgs.to(DEVICE, non_blocking=True, memory_format=torch.channels_last)
+        y = labels["boneage"].to(DEVICE, non_blocking=True)
+        sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        pred = MODEL(imgs)
-        loss = CRITERION(pred, y)
         opt2.zero_grad()
-        loss.backward()
-        opt2.step()
+        with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
+            pred = MODEL(imgs, sex)
+            loss = CRITERION(pred, y)
+        scaler2.scale(loss).backward()
+        scaler2.step(opt2)
+        scaler2.update()
         train_loss += loss.item() * imgs.size(0)
-
-    print(f"epoch {epoch}: Loss = {train_loss/len(train_loader.dataset):.3f}", end = "\t")
 
     MODEL.eval()
     val_loss = 0.0
-    for imgs, labels in val_loader:
-        imgs = imgs.to(DEVICE)
-        y = labels["boneage"].to(DEVICE)
+    val_mae = 0.0
+    n_val = 0
+    with torch.no_grad():
+        for imgs, labels in val_loader:
+            imgs = imgs.to(DEVICE, non_blocking=True, memory_format=torch.channels_last)
+            y = labels["boneage"].to(DEVICE, non_blocking=True)
+            sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        with torch.no_grad():
-            pred = MODEL(imgs)
-        loss = CRITERION(pred, y)
-        val_loss += loss.item() * imgs.size(0)
+            with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
+                pred = MODEL(imgs, sex)
+                loss = CRITERION(pred, y)
+            val_loss += loss.item() * imgs.size(0)
 
-    print(f"Val Loss = {val_loss/len(val_loader.dataset):.3f}\tTime = {time.perf_counter() - start_time:.3f}s")
+            pred_months = pred * BONEAGE_STD + BONEAGE_MEAN
+            y_months = y * BONEAGE_STD + BONEAGE_MEAN
+            val_mae += (pred_months - y_months).abs().sum().item()
+            n_val += y.size(0)
 
-    train_loss_list.append(train_loss/len(train_loader.dataset))
-    val_loss_list.append(val_loss/len(val_loader.dataset))
+    train_loss_mean = train_loss / len(train_loader.dataset)
+    val_loss_mean = val_loss / len(val_loader.dataset)
+    val_mae_mean = val_mae / n_val
 
-    if val_loss < best:
-        best = val_loss
+    print(
+        f"epoch {epoch}: Loss = {train_loss_mean:.3f}\t"
+        f"Val Loss = {val_loss_mean:.3f}\t"
+        f"Val MAE = {val_mae_mean:.3f}\t"
+        f"Time = {time.perf_counter() - start_time:.3f}s"
+    )
+
+    train_loss_list.append(train_loss_mean)
+    val_loss_list.append(val_loss_mean)
+    val_mae_list.append(val_mae_mean)
+
+    if val_mae_mean < best_mae:
+        best_mae = val_mae_mean
         os.makedirs(os.path.join(CKPT_DIR, EXP_NAME), exist_ok=True)
-        torch.save(MODEL, os.path.join(CKPT_DIR, EXP_NAME, f"model_finetune_epoch.pth"))
-        print(f"Saved best model with loss {best} o_O")
+        torch.save(MODEL, os.path.join(CKPT_DIR, EXP_NAME, "model_finetune_epoch.pth"))
+        print(f"Saved best model with Val MAE {best_mae:.3f} months o_O")
 
     if (epoch % PLOT_FREQ == 0) and epoch != 0:
-        analyze.plot_losses(train_loss_list, val_loss_list, save_path=os.path.join(EXP_DIR, f"loss_finetune_epoch{epoch}.png"))
+        analyze.plot_losses(
+            train_loss_list, val_loss_list,
+            save_path=os.path.join(EXP_DIR, f"loss_finetune_epoch{epoch}.png")
+        )
         print(f"Saved plot at epoch {epoch}")
 
+    scheduler2.step()
 
 df = pd.concat(
     {
         "train_loss": pd.Series(train_loss_list),
-        "val_loss":   pd.Series(val_loss_list),
+        "val_loss": pd.Series(val_loss_list),
+        "val_mae": pd.Series(val_mae_list),
     },
-    axis=1
+    axis=1,
 )
 df.index += 1
 df.index.name = "epoch"
 
 df.to_csv(os.path.join(EXP_DIR, "finetune_logs.csv"), index=True)
-
-
 
 
 #%% Analysis
@@ -312,7 +353,6 @@ with open(cfg_path, "w", encoding="utf-8") as f:
     f.write("BATCH_SIZE = " + str(BATCH_SIZE) + "\n")
     f.write("NUM_WORKERS = " + str(NUM_WORKERS) + "\n")
     f.write("PIN_MEM = " + str(PIN_MEM) + "\n")
-    # f.write("TRANSFORM = " + repr(TRANSFORM) + "\n\n")
 
     f.write("# Model\n")
     f.write("MODEL = " + f"{MODEL.__class__.__module__}.{MODEL.__class__.__name__}" + "\n")
@@ -338,11 +378,9 @@ with open(cfg_path, "w", encoding="utf-8") as f:
 
 print(f"Saved config to: {cfg_path}")
 
-
 model_summary_path = os.path.join(EXP_DIR, "model_summary.txt")
 with open(model_summary_path, "w", encoding="utf-8") as f:
     f.write(str(MODEL))
 
-
 print("Script finished Executing ;) ")
-
+#%%
