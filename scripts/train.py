@@ -25,7 +25,7 @@ import sys
 sys.path.append("../src")
 import dataloader
 import analyze
-from transforms import TRAIN_TRANSFORM, VAL_TRANSFORM
+from transforms import TRAIN_TRANSFORM_RES, VAL_TRANSFORM_RES, TRAIN_TRANSFORM_EFN, VAL_TRANSFORM_EFN
 from wingloss import CombinedRegressionLoss
 
 sys.path.append("..")
@@ -60,6 +60,9 @@ BONEAGE_STD  = 41.182
 # MODEL = resnet50_v2.ResNet50_Regressor()
 MODEL = efficientnet.EfficientNet_Regressor()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
+TRAIN_TRANSFORM = TRAIN_TRANSFORM_EFN
+VAL_TRANSFORM = VAL_TRANSFORM_EFN
 
 CRITERION = CombinedRegressionLoss()
 

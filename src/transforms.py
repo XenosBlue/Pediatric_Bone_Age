@@ -79,7 +79,7 @@ class AddGaussianNoise(nn.Module):
 
 IMG_SIZE = 224
 
-TRAIN_TRANSFORM = T.Compose([
+TRAIN_TRANSFORM_RES = T.Compose([
     T.Resize((IMG_SIZE, IMG_SIZE)),
     T.Grayscale(num_output_channels=3),
     T.RandomAffine(
@@ -99,7 +99,7 @@ TRAIN_TRANSFORM = T.Compose([
     ),
 ])
 
-VAL_TRANSFORM = T.Compose([
+VAL_TRANSFORM_RES = T.Compose([
     T.Resize((IMG_SIZE, IMG_SIZE)),
     # FixedCLAHE(clip_limit=2.0, tile_grid_size=8),
     T.Grayscale(num_output_channels=3),
