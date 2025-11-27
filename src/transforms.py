@@ -12,28 +12,22 @@ import torchvision.transforms as T
 
 
 class FixedCLAHE(nn.Module):
-    """
-    Apply CLAHE with fixed clip limit and tile size.
-    Works on PIL.Image (grayscale or RGB).
-    """
-    def __init__(self, clip_limit: float = 2.0, tile_grid_size: int = 8):
+    def __init__(self, clip_limit=2.0, tile_grid_size=8):
         super().__init__()
         self.clip_limit = clip_limit
         self.tile_grid_size = tile_grid_size
-
-    def forward(self, img: Image.Image) -> Image.Image:
-        np_img = np.array(img)
-
-        if np_img.ndim == 3:  # H,W,C
-            np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
-
-        clahe = cv2.createCLAHE(
+        self.clahe = cv2.createCLAHE(
             clipLimit=self.clip_limit,
             tileGridSize=(self.tile_grid_size, self.tile_grid_size),
         )
-        np_img = clahe.apply(np_img)
 
+    def forward(self, img: Image.Image) -> Image.Image:
+        np_img = np.array(img)
+        if np_img.ndim == 3:
+            np_img = cv2.cvtColor(np_img, cv2.COLOR_RGB2GRAY)
+        np_img = self.clahe.apply(np_img)
         return Image.fromarray(np_img)
+
 
 
 class RandomCLAHE(nn.Module):
@@ -87,16 +81,14 @@ IMG_SIZE = 224
 
 TRAIN_TRANSFORM = T.Compose([
     T.Resize((IMG_SIZE, IMG_SIZE)),
-    RandomCLAHE(),
     T.Grayscale(num_output_channels=3),
     T.RandomAffine(
-        degrees=10,                 # rotation
-        translate=(0.05, 0.05),     # up to 5% shift
-        scale=(0.9, 1.1),           # zoom in/out
+        degrees=10,
+        translate=(0.05, 0.05),
+        scale=(0.9, 1.1),
     ),
-    T.RandomApply([T.RandomPosterize(bits=4)], p=0.4),
+    T.RandomApply([T.RandomPosterize(bits=4)], p=0.2),
     T.RandomApply([T.RandomEqualize()], p=0.3),
-    T.RandomApply([T.ColorJitter(contrast=0.2)], p=0.7),
     T.RandomApply([T.RandomAdjustSharpness(sharpness_factor=2.0)], p=0.5),
     T.RandomApply([T.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.3),
     T.ToTensor(),

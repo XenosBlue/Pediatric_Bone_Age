@@ -48,3 +48,10 @@ class EfficientNet_Regressor(nn.Module):
         emb = torch.cat([emb, sex_emb], dim=1)
         return self.fc(emb).squeeze(1)
 # %%
+
+if __name__ == "__main__":
+    model = EfficientNet_Regressor(pretrained=True, freeze_backbone=False)
+    x = torch.randn(4, 3, 224, 224)
+    y = torch.randint(0, 2, (4,))
+    print(model(x, y))
+# %%
