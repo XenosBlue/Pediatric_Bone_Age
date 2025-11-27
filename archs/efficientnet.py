@@ -39,14 +39,19 @@ class EfficientNet_Regressor(nn.Module):
 
     def forward(self, x: torch.Tensor, sex: torch.Tensor):
         emb = self.ftr_xtr(x)
+        # print(emb.shape)
         emb = self.avg_pool(emb)
+        # print(emb.shape)
         emb = emb.flatten(1)
-
+        # print(emb.shape)
         sex = sex.long().view(-1)
         sex_emb = self.sex_embed(sex)
 
         emb = torch.cat([emb, sex_emb], dim=1)
-        return self.fc(emb).squeeze(1)
+        # print(emb.shape)
+        out = self.fc(emb).squeeze(1)
+        # print(out.shape)
+        return out
 # %%
 
 if __name__ == "__main__":
@@ -54,4 +59,5 @@ if __name__ == "__main__":
     x = torch.randn(4, 3, 224, 224)
     y = torch.randint(0, 2, (4,))
     print(model(x, y))
+    print(model)
 # %%

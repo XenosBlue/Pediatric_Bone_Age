@@ -101,7 +101,41 @@ TRAIN_TRANSFORM = T.Compose([
 
 VAL_TRANSFORM = T.Compose([
     T.Resize((IMG_SIZE, IMG_SIZE)),
-    FixedCLAHE(clip_limit=2.0, tile_grid_size=8),
+    # FixedCLAHE(clip_limit=2.0, tile_grid_size=8),
+    T.Grayscale(num_output_channels=3),
+    T.ToTensor(),
+    T.Normalize(mean=[0.485, 0.456, 0.406],
+                std=[0.229, 0.224, 0.225]),
+])
+
+
+
+IMG_SIZE = 380
+
+
+TRAIN_TRANSFORM_EFN = T.Compose([
+    T.Resize((IMG_SIZE, IMG_SIZE)),
+    T.Grayscale(num_output_channels=3),
+    T.RandomAffine(
+        degrees=10,
+        translate=(0.05, 0.05),
+        scale=(0.9, 1.1),
+    ),
+    T.RandomApply([T.RandomPosterize(bits=4)], p=0.2),
+    T.RandomApply([T.RandomEqualize()], p=0.3),
+    T.RandomApply([T.RandomAdjustSharpness(sharpness_factor=2.0)], p=0.5),
+    T.RandomApply([T.GaussianBlur(kernel_size=5, sigma=(0.1, 2.0))], p=0.3),
+    T.ToTensor(),
+    AddGaussianNoise(mean=0.0, std=0.02),
+    T.Normalize(
+        mean=[0.485, 0.456, 0.406],
+        std=[0.229, 0.224, 0.225],
+    ),
+])
+
+VAL_TRANSFORM_EFN = T.Compose([
+    T.Resize((IMG_SIZE, IMG_SIZE)),
+    # FixedCLAHE(clip_limit=2.0, tile_grid_size=8),
     T.Grayscale(num_output_channels=3),
     T.ToTensor(),
     T.Normalize(mean=[0.485, 0.456, 0.406],

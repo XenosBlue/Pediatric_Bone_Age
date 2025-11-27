@@ -37,7 +37,8 @@ from archs import *
 
 ROOT_DIR = ".."
 NAME = "Nikhil"
-EXP_NAME = "ResNet50_50_50_epochs_exp2"
+# EXP_NAME = "ResNet50_50_50_epochs_exp2"
+EXP_NAME = "del_50_50_epochs_exp1"
 
 TRAIN_CSV = os.path.join(ROOT_DIR, "data", "train.csv")
 TRAIN_DIR = os.path.join(ROOT_DIR, "data", "boneage-training-dataset")
@@ -50,23 +51,24 @@ CKPT_DIR = os.path.join(ROOT_DIR, "checkpoints")
 os.makedirs(EXP_DIR, exist_ok=True)
 
 IMG_SIZE = 224
-BATCH_SIZE = 256
+BATCH_SIZE = 128
 NUM_WORKERS = 4
 PIN_MEM = True
 BONEAGE_MEAN = 132.0
 BONEAGE_STD  = 41.182
 
-MODEL = resnet50_v2.ResNet50_Regressor()
+# MODEL = resnet50_v2.ResNet50_Regressor()
+MODEL = efficientnet.EfficientNet_Regressor()
 DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 CRITERION = CombinedRegressionLoss()
 
-EPOCHS_P1 = 50
+EPOCHS_P1 = 2
 OPTIMIZER_P1 = torch.optim.AdamW
-LERNING_RATE_P1 = 1e-3
-WEIGHT_DECAY_P1 = 1e-4
+LERNING_RATE_P1 = 1e-4
+WEIGHT_DECAY_P1 = 1e-5
 
-EPOCHS_P2 = 50
+EPOCHS_P2 = 2
 OPTIMIZER_P2 = torch.optim.SGD
 LERNING_RATE_P2 = 1e-4
 REGULARIZER_P2 = 1e-5
@@ -90,7 +92,7 @@ train_loader = DataLoader(
     num_workers=NUM_WORKERS,
     pin_memory=PIN_MEM,
     persistent_workers=(NUM_WORKERS > 0),
-    prefetch_factor=2 if NUM_WORKERS > 0 else None,
+    prefetch_factor=4 if NUM_WORKERS > 0 else None,
 )
 
 val_dataset = dataloader.BoneAgeDataset(
@@ -107,7 +109,7 @@ val_loader = DataLoader(
     num_workers=NUM_WORKERS,
     pin_memory=PIN_MEM,
     persistent_workers=(NUM_WORKERS > 0),
-    prefetch_factor=2 if NUM_WORKERS > 0 else None,
+    prefetch_factor=4 if NUM_WORKERS > 0 else None,
 )
 
 #%% Optimizers
@@ -151,7 +153,7 @@ for epoch in range(1, EPOCHS_P1 + 1):
         y = labels["boneage"].to(DEVICE, non_blocking=True)
         sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        opt1.zero_grad()
+        opt1.zero_grad(set_to_none=True)
         with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
             pred = MODEL(imgs, sex)
             loss = CRITERION(pred, y)
@@ -233,6 +235,8 @@ MODEL.to(DEVICE)
 for param in MODEL.parameters():
     param.requires_grad = True
 
+MODEL.compile()
+
 print("Unfreezed all params")
 
 train_loss_list = []
@@ -254,7 +258,7 @@ for epoch in range(1, EPOCHS_P2 + 1):
         y = labels["boneage"].to(DEVICE, non_blocking=True)
         sex = labels["male"].to(DEVICE, non_blocking=True)
 
-        opt2.zero_grad()
+        opt2.zero_grad(set_to_none=True)
         with torch.amp.autocast(device_type=DEVICE, dtype=torch.float16):
             pred = MODEL(imgs, sex)
             loss = CRITERION(pred, y)

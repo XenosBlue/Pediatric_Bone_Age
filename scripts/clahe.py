@@ -25,9 +25,9 @@ def clahe_dir_list(dir_list: List[str],
 #%% example
 
 dirs = [
-    "../data/boneage-training-dataset"
+    "../data/boneage-training-dataset",
     "../data/Bone Age Validation Set/boneage-validation-dataset-1",
-    # "../data/Bone Age Validation Set/boneage-validation-dataset-2",
+    "../data/Bone Age Validation Set/boneage-validation-dataset-2",
     
 ]
 clahe_dir_list(dirs)
